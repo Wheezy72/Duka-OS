@@ -104,6 +104,17 @@ ipcMain.handle(
   }
 );
 
+// Receive stock into inventory (e.g. deliveries).
+ipcMain.handle(
+  "stock:receive",
+  async (
+    _event,
+    payload: { entries: { productId: number; quantity: number }[] }
+  ) => {
+    return inventoryService.receiveStock(payload.entries);
+  }
+);
+
 // User login by PIN.
 ipcMain.handle("user:login", async (_event, pin: string) => {
   return userService.loginWithPin(pin);

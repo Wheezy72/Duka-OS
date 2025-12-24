@@ -32,6 +32,10 @@ const api = {
     create: (payload: ProcessSaleInput) =>
       ipcRenderer.invoke("sale:create", payload),
   },
+  stock: {
+    receive: (entries: { productId: number; quantity: number }[]) =>
+      ipcRenderer.invoke("stock:receive", { entries }) as Promise<void>,
+  },
   user: {
     login: (pin: string) => ipcRenderer.invoke("user:login", pin),
   },

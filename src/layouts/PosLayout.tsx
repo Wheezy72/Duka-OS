@@ -153,18 +153,14 @@ export const PosLayout: React.FC = () => {
     setScanMessage(null);
 
     try {
-      const results = await window.duka.product.search(term);
+      const product = await window.duka.product.scanLookup(term);
 
-      if (!results || results.length === 0) {
+      if (!product) {
         setScanMessage("No product found. You can add it below as a custom item.");
         return;
       }
 
-      // Prefer an exact barcode match if present.
-      const exact =
-        results.find((p) => p.name === term) ?? results[0];
-
-      addToCart(exact);
+      addToCart(product);
       setScanInput("");
     } catch (error: any) {
       setScanMessage("Scan/search failed. Try again.");

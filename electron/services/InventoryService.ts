@@ -19,6 +19,39 @@ export class InventoryService {
   constructor(private readonly prisma: PrismaClient) {}
 
   /**
+   * Receive stock into the shop (e.g. new delivery).
+   * Increments stockQty and writes RESTOCK StockEvents.
+   */
+  async receiveStock(
+    entries: { productId: number; quantity: number }[]
+  ): Promise<void> {
+    if (!entries || entries.length === 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const entry of entries) {
+        if (!Number.isFinite(entry.quantity) || entry.quantity <= 0) continue;
+
+        await tx.product.update({
+          where: { id: entry.productId },
+          data: {
+            stockQty: {
+              increment: entry.quantity,
+            },
+          },
+        });
+
+        await tx.stockEvent.create({
+          data: {
+            productId: entry.productId,
+            delta: entry.quantity,
+            reason: StockEventReason.RESTOCK,
+          },
+        });
+      }
+    });
+  }
+
+  /**
    * Processes a sale and applies all stock movements atomically.
    *
    * Important business rules:
