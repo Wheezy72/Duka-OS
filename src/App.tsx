@@ -195,9 +195,9 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs">
-        <div className="font-semibold tracking-tight">Duka-OS</div>
-        <nav className="flex items-center gap-2">
-          <button
+       <<div className="flex items-center gap-2">
+         <Sdiv className="font-semibold tracking-tight">Duka-</-2div>
+         < div className="rounded-full border border-slate-700/70 bg-slate-900/80 px-2 py-0.5 text-[11px] text          <button
             type="button"
             onClick={() => setScreen("POS")}
             className={`rounded px-2 py-1 ${
