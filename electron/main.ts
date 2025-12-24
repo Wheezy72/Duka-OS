@@ -114,11 +114,31 @@ ipcMain.handle("product:search", async (_event, query: string) => {
   return productService.searchProducts(query);
 });
 
+// Scan lookup tuned for barcode scanners.
+ipcMain.handle("product:scanLookup", async (_event, term: string) => {
+  return productService.scanLookup(term);
+});
+
 // Create a simple ad-hoc product (e.g. avocados from your tree).
 ipcMain.handle(
   "product:createCustom",
   async (_event, payload: { name: string; price: number }) => {
     return productService.createCustomProduct(payload.name, payload.price);
+  }
+);
+
+// Upsert a basic catalog product from a scanned barcode.
+ipcMain.handle(
+  "product:upsertBasic",
+  async (
+    _event,
+    payload: { barcode: string; name: string; price: number }
+  ) => {
+    return productService.upsertBasicProduct(
+      payload.barcode,
+      payload.name,
+      payload.price
+    );
   }
 );
 

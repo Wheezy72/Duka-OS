@@ -17,7 +17,13 @@ declare global {
     duka: {
       product: {
         search: (query: string) => Promise<ProductSummary[]>;
+        scanLookup: (term: string) => Promise<ProductSummary | null>;
         createCustom: (name: string, price: number) => Promise<ProductSummary>;
+        upsertBasic: (
+          barcode: string,
+          name: string,
+          price: number
+        ) => Promise<ProductSummary>;
       };
       sale: {
         create: (payload: {

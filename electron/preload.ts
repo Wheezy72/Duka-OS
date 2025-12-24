@@ -11,8 +11,19 @@ const api = {
       ipcRenderer.invoke("product:search", query) as Promise<
         { id: number; name: string; price: number }[]
       >,
+    scanLookup: (term: string) =>
+      ipcRenderer.invoke(
+        "product:scanLookup",
+        term
+      ) as Promise<{ id: number; name: string; price: number } | null>,
     createCustom: (name: string, price: number) =>
       ipcRenderer.invoke("product:createCustom", {
+        name,
+        price,
+      }) as Promise<{ id: number; name: string; price: number }>,
+    upsertBasic: (barcode: string, name: string, price: number) =>
+      ipcRenderer.invoke("product:upsertBasic", {
+        barcode,
         name,
         price,
       }) as Promise<{ id: number; name: string; price: number }>,
