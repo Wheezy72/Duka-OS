@@ -17,7 +17,8 @@ At the top level the project is split into three main areas:
 ```text
 .
 ├── electron/        # Electron main process + services (business logic)
-│   ├── main.ts      # Boot sequence, IPC wiring, DB init
+│   ├── main.ts      # Boot sequence, IPC wiring, DB init, IPC handlers
+│   ├── preload.ts   # IPC bridge → exposes window.duka.* to the renderer
 │   └── services/    # Inventory, Payments, Printing, Auth, Products...
 ├── prisma/          # Prisma schema & migrations (SQLite)
 │   └── schema.prisma
@@ -31,8 +32,23 @@ At the top level the project is split into three main areas:
 - **`electron/main.ts`**
   - Boots Prisma/SQLite and configures WAL mode.
   - Creates the `BrowserWindow`.
-  - Registers IPC handlers (`sale:create`, `user:login`, `product:search`).
+  - Registers IPC handlers:
+    - `sale:create` → `InventoryService.processSale`
+    - `user:login` → `UserService.loginWithPin`
+    - `product:search` → `ProductService.searchProducts`
+    - `payment:initiateSTK` / `payment:checkStatus` → `PaymentService`
+    - `printer:printSaleReceipt` → `ReceiptService` → `PrinterService`
   - IPC handlers are **thin** – they just call service methods.
+
+- **`electron/preload.ts`**
+  - Runs in the preload context of the BrowserWindow.
+  - Exposes a safe API on `window.duka`:
+    - `window.duka.product.search(query)`
+    - `window.duka.sale.create(payload)`
+    - `window.duka.payment.initiateSTK(phone, amount)`
+    - `window.duka.payment.checkStatus(checkoutRequestId)`
+    - `window.duka.printer.printSaleReceipt(saleId)`
+  - Renderer never sees `ipcRenderer` directly; it talks only to `window.duka`.
 
 - **`electron/services/InventoryService.ts`**
   - Owns stock movement and sale creation logic.
@@ -42,12 +58,18 @@ At the top level the project is split into three main areas:
 - **`electron/services/PaymentService.ts`**
   - Handles M-Pesa STK Push (online payments).
   - Uses Safaricom’s REST APIs (sandbox vs production based on `NODE_ENV`).
-  - Returns explicit statuses and never auto-retries.
+  - Returns explicit statuses and never auto-retries (to avoid double billing).
+  - Signals when **manual verification** is required (e.g. network issues).
 
 - **`electron/services/PrinterService.ts`**
   - Talks directly to a USB thermal printer using raw bytes (via `usb`).
   - Formats a simple receipt: header, items, total, “Thank You”.
   - Vendor/Product IDs are definable in code so techs can fix printers on-site.
+
+- **`electron/services/ReceiptService.ts`**
+  - Fetches a `Sale` with its `SaleItem`s and `Product`s from the DB.
+  - Hands that bundle to `PrinterService.printReceipt` to produce a paper receipt.
+  - Used by the `printer:printSaleReceipt` IPC handler.
 
 - **Other services (examples)**
   - `UserService` – PIN login using hashed PINs.
@@ -214,11 +236,14 @@ File: **`electron/main.ts`**
 3. **Create the main `BrowserWindow`**
    - Load Vite dev server in development.
    - Load built `index.html` in production.
+   - Attach `preload.js` so the renderer gets `window.duka` instead of raw `ipcRenderer`.
 
 4. **Wire IPC handlers**
    - `sale:create` → `InventoryService.processSale`
    - `user:login` → `UserService.loginWithPin`
    - `product:search` → `ProductService.searchProducts`
+   - `payment:initiateSTK` / `payment:checkStatus` → `PaymentService`
+   - `printer:printSaleReceipt` → `ReceiptService` → `PrinterService`
 
 5. **Clean shutdown**
    - On `before-quit`, disconnect Prisma so WAL is flushed and the DB is cleanly closed.
@@ -390,24 +415,59 @@ In your Tailwind/global CSS, map these to styles:
 
 ### 7.3 Wiring to the Backend
 
-Currently `PosLayout` uses in-memory mock products to keep the layout self-contained.
+`PosLayout` is already wired to the backend via the preload bridge:
 
-To hook this into the real backend:
+- On mount:
+  - Calls `window.duka.product.search("")` to populate the product grid.
+- On **cash** payment:
+  - Calls `window.duka.sale.create({ items, paymentMethod: "CASH" })`.
+  - On success, calls `window.duka.printer.printSaleReceipt(sale.id)`.
+- On **M-Pesa** payment:
+  - Takes the phone number from the M-Pesa input.
+  - Calls `window.duka.payment.initiateSTK(phone, total)`:
+    - On `status: "OK"` → stores `checkoutRequestId` and shows “STK push sent” message.
+    - On error with `manualMode: true` → surfaces a “use manual verification” message.
+  - “Check Status” button calls `window.duka.payment.checkStatus(checkoutRequestId)`:
+    - On `status: "SUCCESS"` → creates a sale with `paymentMethod: "MPESA"` and prints a receipt.
+    - On `PENDING` → shows “still pending” message.
+    - On `FAILED` → shows failure reason.
+    - On `MANUAL_VERIFY_NEEDED` → instructs the cashier to manually verify before releasing goods.
 
-1. **Expose IPC methods in preload**
-   - Example: `window.duka.sale.create`, `window.duka.product.search`, etc.
-   - Preload calls `ipcRenderer.invoke("product:search", query)`.
+Throughout this flow:
 
-2. **Call IPC from React**
-   - Replace the static `products` state with data from IPC.
-   - On Pay:
-     - Collect cart items.
-     - Send to `sale:create`.
-     - Show receipt / print via `PrinterService` IPC if required.
+- The renderer only talks to `window.duka.*`.
+- `window.duka.*` calls IPC handlers.
+- IPC handlers call services.
+- Services talk to Prisma/SQLite.
 
-3. **Follow the data flow rule**
-   - Renderer never touches Prisma or services directly.
-   - All calls are `Renderer → IPC → Main → Service → Prisma`.
+### 7.4 InventoryService Harness
+
+For manual testing of bulk-breaking behaviour, there is a small harness:
+
+- **File**: `electron/services/InventoryServiceHarness.ts`
+- What it does:
+  - Upserts:
+    - A “parent sack” product (`barcode: "HARNESS_PARENT_SACK"`) with `isBulkParent = true`.
+    - A “child kilo” product (`barcode: "HARNESS_CHILD_KILO"`) with `conversionFactor = 50` and `parentProductId` pointing to the sack.
+  - Runs a sale via `InventoryService.processSale` that sells 60kg when the child has 0 stock and the parent has 2 sacks.
+  - Prints:
+    - Parent and child `stockQty` before/after.
+    - The latest few `StockEvent` rows for those products.
+
+To run it against your dev DB (after migrations):
+
+```bash
+ts-node electron/services/InventoryServiceHarness.ts
+```
+
+You should see:
+
+- Parent stock going down (possibly negative if you tweak quantities).
+- Child stock going up from bulk break, then down for the sale.
+- `StockEvent` rows with reasons:
+  - `BULK_BREAK_SOURCE`
+  - `BULK_BREAK_DEST`
+  - `SALE`
 
 ---
 

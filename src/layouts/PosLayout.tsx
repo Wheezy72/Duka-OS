@@ -24,6 +24,26 @@ declare global {
           paymentMethod: "CASH" | "MPESA";
         }) => Promise<{ id: number }>;
       };
+      payment: {
+        initiateSTK: (
+          phone: string,
+          amount: number
+        ) => Promise<{
+          status: "OK" | "ERROR";
+          checkoutRequestId?: string;
+          raw?: unknown;
+          errorMessage?: string;
+          manualMode?: boolean;
+        }>;
+        checkStatus: (
+          checkoutRequestId: string
+        ) => Promise<
+          | { status: "SUCCESS"; raw: unknown }
+          | { status: "PENDING"; raw: unknown }
+          | { status: "FAILED"; reason: string; raw?: unknown }
+          | { status: "MANUAL_VERIFY_NEEDED"; reason: string }
+        >;
+      };
       printer: {
         printSaleReceipt: (saleId: number) => Promise<void>;
       };
@@ -77,6 +97,8 @@ export const PosLayout: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isPaying, setIsPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  const [mpesaPhone, setMpesaPhone] = use);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,11 +170,13 @@ export const PosLayout: React.FC = () => {
     setTheme(next);
   };
 
-  const handlePay = async () => {
+  const handleCashPay = async () => {
     if (cart.length === 0 || isPaying) return;
 
     setIsPaying(true);
     setPayError(null);
+    setMpesaStatus(null);
+    setMpesaCheckoutId(null);
 
     try {
       const sale = await window.duka.sale.create({
@@ -161,7 +185,6 @@ export const PosLayout: React.FC = () => {
           quantity: item.quantity,
           unitPrice: item.price,
         })),
-        // Cash is the simplest happy path; MPESA uses the PaymentService.
         paymentMethod: "CASH",
       });
 
@@ -176,7 +199,106 @@ export const PosLayout: React.FC = () => {
 
       setCart([]);
     } catch (error: any) {
-      setPayError("Failed to complete sale. Try again.");
+      setPayError("Failed to complete cash sale. Try again.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleMpesaInitiate = async () => {
+    if (cart.length === 0 || isPaying) return;
+
+    const phone = mpesaPhone.trim();
+    if (!phone) {
+      setPayError("Enter customer's M-Pesa number.");
+      return;
+    }
+
+    setIsPaying(true);
+    setPayError(null);
+    setMpesaStatus(null);
+    setMpesaCheckoutId(null);
+
+    try {
+      const response = await window.duka.payment.initiateSTK(phone, total);
+
+      if (response.status === "OK" && response.checkoutRequestId) {
+        setMpesaCheckoutId(response.checkoutRequestId);
+        setMpesaStatus(
+          "STK push sent. Ask the customer to enter their M-Pesa PIN."
+        );
+      } else {
+        if (response.manualMode) {
+          setMpesaStatus(
+            response.errorMessage ??
+              "M-Pesa is not reachable. Use manual verification or cash."
+          );
+        } else {
+          setMpesaStatus(
+            response.errorMessage ?? "M-Pesa request failed. Try again."
+          );
+        }
+      }
+    } catch (error: any) {
+      setMpesaStatus(
+        "M-Pesa request failed. Check network or use manual verification."
+      );
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleMpesaConfirm = async () => {
+    if (!mpesaCheckoutId || isPaying) return;
+    if (cart.length === 0) {
+      setMpesaStatus("Cart is empty. Start again if you already closed the sale.");
+      return;
+    }
+
+    setIsPaying(true);
+    setPayError(null);
+
+    try {
+      const status = await window.duka.payment.checkStatus(mpesaCheckoutId);
+
+      if (status.status === "SUCCESS") {
+        const sale = await window.duka.sale.create({
+          items: cart.map((item) => ({
+            productId: item.id,
+            quantity: item.quantity,
+            unitPrice: item.price,
+          })),
+          paymentMethod: "MPESA",
+        });
+
+        try {
+          await window.duka.printer.printSaleReceipt(sale.id);
+        } catch (error: any) {
+          setPayError(
+            "Sale saved but printing failed. Check the receipt printer."
+          );
+        }
+
+        setCart([]);
+        setMpesaCheckoutId(null);
+        setMpesaStatus("M-Pesa payment confirmed.");
+      } else if (status.status === "PENDING") {
+        setMpesaStatus(
+          "Payment is still pending. Ask the customer to check their phone."
+        );
+      } else if (status.status === "FAILED") {
+        setMpesaStatus(status.reason || "M-Pesa reported payment failure.");
+      } else {
+        // MANUAL_VERIFY_NEEDED
+        setMpesaStatus(
+          status.reason ||
+            "M-Pesa status unclear. Use manual verification before releasing goods."
+        );
+      }
+    } catch (error: any) {
+      setMpesaStatus(
+        "Failed to check M-Pesa status. Use manual verification before releasing goods."
+      );
     } finally {
       setIsPaying(false);
     }
@@ -290,16 +412,61 @@ export const PosLayout: React.FC = () => {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handlePay}
-          className="mt-3 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-60"
-          disabled={cart.length === 0 || isPaying}
-        >
-          {isPaying ? "Processing..." : "Pay"}
-        </button>
+        <div className="mt-3 space-y-2 text-xs">
+          <div>
+            <label className="mb-1 block text-[11px]">
+              M-Pesa Number
+            </label>
+            <input
+              type="tel"
+              value={mpesaPhone}
+              onChange={(e) => setMpesaPhone(e.target.value)}
+              placeholder="07XX..."
+              className="w-full rounded border border-slate-700/40 bg-transparent px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCashPay}
+              className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-md transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-60"
+              disabled={cart.length === 0 || isPaying}
+            >
+              {isPaying ? "Processing..." : "Pay Cash"}
+            </button>
+            <button
+              type="button"
+              onClick={handleMpesaInitiate}
+              className="flex-1 rounded-lg bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-md transition hover:bg-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:opacity-60"
+              disabled={cart.length === 0 || isPaying}
+            >
+              {isPaying ? "Processing..." : "Pay with M-Pesa"}
+            </button>
+          </div>
+          {mpesaCheckoutId && (
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] opacity-70">
+                Waiting for M-Pesa confirmation…
+              </span>
+              <button
+                type="button"
+                onClick={handleMpesaConfirm}
+                className="rounded border border-sky-500 px-2 py-1 text-[11px] text-sky-500"
+                disabled={isPaying}
+              >
+                Check Status
+              </button>
+            </div>
+          )}
+        </div>
+
+        {mpesaStatus && (
+          <p className="mt-2 text-xs">
+            {mpesaStatus}
+          </p>
+        )}
         {payError && (
-          <p className="mt-2 text-xs text-red-500">
+          <p className="mt-1 text-xs text-red-500">
             {payError}
           </p>
         )}
