@@ -114,6 +114,14 @@ ipcMain.handle("product:search", async (_event, query: string) => {
   return productService.searchProducts(query);
 });
 
+// Create a simple ad-hoc product (e.g. avocados from your tree).
+ipcMain.handle(
+  "product:createCustom",
+  async (_event, payload: { name: string; price: number }) => {
+    return productService.createCustomProduct(payload.name, payload.price);
+  }
+);
+
 // Payments: M-Pesa STK.
 ipcMain.handle(
   "payment:initiateSTK",

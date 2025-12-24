@@ -11,6 +11,11 @@ const api = {
       ipcRenderer.invoke("product:search", query) as Promise<
         { id: number; name: string; price: number }[]
       >,
+    createCustom: (name: string, price: number) =>
+      ipcRenderer.invoke("product:createCustom", {
+        name,
+        price,
+      }) as Promise<{ id: number; name: string; price: number }>,
   },
   sale: {
     create: (payload: ProcessSaleInput) =>
