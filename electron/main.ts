@@ -1,0 +1,109 @@
+import { app, BrowserWindow, ipcMain } from "electron";
+import path from "path";
+import { PrismaClient } from "@prisma/client";
+import {
+  InventoryService,
+  ProcessSaleInput,
+} from "./services/InventoryService";
+import { UserService } from "./services/UserService";
+import { ProductService } from "./services/ProductService";
+
+let mainWindow: BrowserWindow | null = null;
+
+// Single PrismaClient for the whole Electron process.
+// This avoids SQLite file locks and keeps connection handling predictable.
+const prisma = new PrismaClient();
+
+const inventoryService = new InventoryService(prisma);
+const userService = new UserService(prisma);
+const productService = new ProductService(prisma);
+
+async function initDatabase() {
+  await prisma.$connect();
+
+  // WAL mode is safer for power cuts and lets reads continue while writes happen.
+  await prisma.$executeRawUnsafe(`PRAGMA journal_mode = WAL;`);
+  // FULL means SQLite syncs to disk properly before confirming the write.
+  await prisma.$executeRawUnsafe(`PRAGMA synchronous = FULL;`);
+}
+
+async function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    webPreferences: {
+      // Preload is where the IPC bridge lives – Renderer never sees Prisma.
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  const indexHtml = path.join(__dirname, "../renderer/index.html");
+
+  if (devServerUrl) {
+    await mainWindow.loadURL(devServerUrl);
+  } else {
+    await mainWindow.loadURL(`file://${indexHtml}`);
+  }
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+}
+
+async function boot() {
+  await initDatabase();
+  await createWindow();
+}
+
+// ---- Electron lifecycle ----------------------------------------------------
+
+app.on("ready", () => {
+  boot().catch((err) => {
+    // If boot fails we want it loud and obvious during development.
+    console.error("Failed to boot Duka-OS main process:", err);
+    app.quit();
+  });
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("before-quit", async (event) => {
+  // Give Prisma a chance to flush WAL and close cleanly.
+  event.preventDefault();
+  try {
+    await prisma.$disconnect();
+  } finally {
+    app.exit(0);
+  }
+});
+
+app.on("activate", () => {
+  if (mainWindow === null) {
+    void createWindow();
+  }
+});
+
+// ---- IPC handlers: thin wrappers over services ----------------------------
+
+// Sales / inventory.
+ipcMain.handle(
+  "sale:create",
+  async (_event, payload: ProcessSaleInput) => {
+    return inventoryService.processSale(payload);
+  }
+);
+
+// User login by PIN.
+ipcMain.handle("user:login", async (_event, pin: string) => {
+  return userService.loginWithPin(pin);
+});
+
+// Product search for POS grid.
+ipcMain.handle("product:search", async (_event, query: string) => {
+  return productService.searchProducts(query);
+});

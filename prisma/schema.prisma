@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // SQLite lives in the repo so desktop installs are self-contained.
+  url      = "file:./dev.db"
+}
+
+enum PaymentMethod {
+  CASH
+  MPESA
+}
+
+enum UserRole {
+  OWNER
+  CASHIER
+}
+
+enum StockEventReason {
+  SALE
+  BULK_BREAK_SOURCE
+  BULK_BREAK_DEST
+  RESTOCK
+}
+
+model Product {
+  id               Int       @id @default(autoincrement())
+  name             String
+  barcode          String?   @unique
+  stockQty         Float     @default(0) // Always in smallest sellable unit (e.g. kilos, pieces).
+  price            Float     // Current unit price in KES.
+  isBulkParent     Boolean   @default(false)
+  conversionFactor Float?    // For children: how many child units we get from one parent (e.g. 50kg sack -> 50).
+  parentProductId  Int?
+  parent           Product?  @relation("ProductParent", fields: [parentProductId], references: [id])
+  children         Product[] @relation("ProductParent")
+
+  saleItems   SaleItem[]
+  stockEvents StockEvent[]
+}
+
+model Sale {
+  id            Int           @id @default(autoincrement())
+  total         Float
+  paymentMethod PaymentMethod
+  isSynced      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+
+  items SaleItem[]
+}
+
+model SaleItem {
+  id          Int     @id @default(autoincrement())
+  sale        Sale    @relation(fields: [saleId], references: [id])
+  saleId      Int
+  product     Product @relation(fields: [productId], references: [id])
+  productId   Int
+  quantity    Float
+  priceAtSale Float   // Snapshot of unit price when the sale happened.
+}
+
+model StockEvent {
+  id        Int              @id @default(autoincrement())
+  product   Product          @relation(fields: [productId], references: [id])
+  productId Int
+  delta     Float            // Positive for stock in, negative for stock out.
+  reason    StockEventReason
+  createdAt DateTime         @default(now())
+}
+
+model User {
+  id      Int      @id @default(autoincrement())
+  pinHash String   // Hashed PIN so we never store raw codes.
+  role    UserRole
+
+  shifts Shift[]
+}
+
+model Shift {
+  id         Int      @id @default(autoincrement())
+  user       User?    @relation(fields: [userId], references: [id])
+  userId     Int?
+  cashStart  Float    // Opening float.
+  cashEnd    Float?   // Expected closing cash from system.
+  actualCash Float?   // Counted cash at close.
+  openedAt   DateTime @default(now())
+  closedAt   DateTime?
+}
