@@ -44,6 +44,9 @@ async function createWindow() {
     webPreferences: {
       // Preload is where the IPC bridge lives – Renderer never sees Prisma.
       preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
     },
   });
 

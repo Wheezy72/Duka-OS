@@ -107,9 +107,24 @@ export class PrinterService {
   }
 
   /**
-   * Sends the receipt buffer to the printer over USB.
+   * Sends a simple pulse to open a cash drawer connected via the receipt printer.
+   * Many ESC/POS-compatible drawers listen to the ESC p command.
    */
-  async printReceipt(sale: SaleWithItemsAndProducts): Promise<void> {
+  async openCashDrawer(): Promise<void> {
+    const device = this.findPrinter();
+    if (!device) {
+      throw new Error("USB receipt printer not found. Check VendorID/ProductID.");
+    }
+
+    device.open();
+
+    try {
+      const iface = device.interfaces[0];
+      if (!iface) {
+        throw new Error("USB printer has no usable interface.");
+      }
+
+      if (iface{
     const device = this.findPrinter();
     if (!device) {
       throw new Error("USB receipt printer not found. Check VendorID/ProductID.");
