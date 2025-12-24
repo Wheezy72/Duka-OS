@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
+import { WhatsAppService } from "./services/WhatsAppService";
+import { NotificationService } from "./services/NotificationService";
 import {
   InventoryService,
   ProcessSaleInput,
@@ -173,5 +175,18 @@ ipcMain.handle(
   "printer:printSaleReceipt",
   async (_event, saleId: number) => {
     return receiptService.printSaleReceipt(saleId);
+  }
+);
+
+// Notifications: low stock report via WhatsApp.
+ipcMain.handle("notify:lowStock", async () => {
+  return notificationService.sendLowStockReport();
+});
+
+// Notifications: owner help request (e.g. forgotten PIN).
+ipcMain.handle(
+  "notify:ownerHelp",
+  async (_event, context?: string) => {
+    return notificationService.sendOwnerHelpRequest(context);
   }
 );
