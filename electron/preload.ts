@@ -39,6 +39,12 @@ const api = {
   user: {
     login: (pin: string) => ipcRenderer.invoke("user:login", pin),
   },
+  notify: {
+    sendLowStockReport: (threshold?: number) =>
+      ipcRenderer.invoke("notify:lowStock", threshold) as Promise<void>,
+    ownerHelp: (context?: string) =>
+      ipcRenderer.invoke("notify:ownerHelp", context) as Promise<void>,
+  },
   payment: {
     initiateSTK: (phone: string, amount: number) =>
       ipcRenderer.invoke("payment:initiateSTK", {

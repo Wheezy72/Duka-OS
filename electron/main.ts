@@ -179,9 +179,14 @@ ipcMain.handle(
 );
 
 // Notifications: low stock report via WhatsApp.
-ipcMain.handle("notify:lowStock", async () => {
-  return notificationService.sendLowStockReport();
-});
+ipcMain.handle(
+  "notify:lowStock",
+  async (_event, threshold?: number) => {
+    return notificationService.sendLowStockReport(
+      typeof threshold === "number" ? threshold : undefined
+    );
+  }
+);
 
 // Notifications: owner help request (e.g. forgotten PIN).
 ipcMain.handle(

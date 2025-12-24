@@ -14,7 +14,7 @@ declare global {
         login: (pin: string) => Promise<{ role: UserRole }>;
       };
       notify: {
-        sendLowStockReport: () => Promise<void>;
+        sendLowStockReport: (threshold?: number) => Promise<void>;
         ownerHelp: (context?: string) => Promise<void>;
       };
     };
@@ -30,6 +30,10 @@ const App: React.FC = () => {
   const [pendingScreen, setPendingScreen] = useState<Screen | null>(null);
   const [notifyMessage, setNotifyMessage] = useState<string | null>(null);
   const [notifyLoading, setNotifyLoading] = useState(false);
+  const [loginPin, setLoginPin] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginInfo, setLoginInfo] = useState<string | null>(null);
+  const [lowStockThreshold, setLowStockThreshold] = useState<string>("5");
 
   const requireOwnerFor = (target: Screen) => {
     if (userRole === "OWNER") {
@@ -82,11 +86,51 @@ const App: React.FC = () => {
   const handleLowStockReport = async () => {
     setNotifyLoading(true);
     setNotifyMessage(null);
+    const threshold = Number(lowStockThreshold);
+    const thresholdValue =
+      Number.isFinite(threshold) && threshold > 0 ? threshold : undefined;
     try {
-      await window.duka.notify.sendLowStockReport();
+      await window.duka.notify.sendLowStockReport(thresholdValue);
       setNotifyMessage("Low stock report sent to owner via WhatsApp.");
     } catch {
       setNotifyMessage("Failed to send low stock report.");
+    } finally {
+      setNotifyLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    const pin = loginPin.trim();
+    if (!pin) {
+      setLoginError("Enter your PIN.");
+      return;
+    }
+    setLoginError(null);
+    setLoginInfo(null);
+    try {
+      const result = await window.duka.user.login(pin);
+      if (result.role === "OWNER" || result.role === "CASHIER") {
+        setUserRole(result.role);
+        setScreen("POS");
+      } else {
+        setLoginError("Unknown user role.");
+      }
+    } catch {
+      setLoginError("Incorrect PIN or login error.");
+    }
+  };
+
+  const handleForgotPin = async () => {
+    setLoginInfo(null);
+    setLoginError(null);
+    setNotifyLoading(true);
+    try {
+      await window.duka.notify.ownerHelp("Forgot PIN at login screen");
+      setLoginInfo(
+        "We’ve notified the owner via WhatsApp; wait for them to reset your PIN."
+      );
+    } catch {
+      setLoginError("Failed to reach owner via WhatsApp.");
     } finally {
       setNotifyLoading(false);
     }
@@ -97,6 +141,56 @@ const App: React.FC = () => {
     if (screen === "STOCK_RECEIVE") return <StockReceiveLayout />;
     return <PosLayout />;
   };
+
+  if (!userRole) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+        <div className="w-full max-w-xs rounded-lg border border-slate-800 bg-slate-900/90 p-5 text-xs shadow-xl">
+          <h1 className="mb-3 text-sm font-semibold tracking-tight">
+            Duka-OS Login
+          </h1>
+          <p className="mb-2 text-[11px] opacity-70">
+            Enter your PIN to start using the POS.
+          </p>
+          <input
+            type="password"
+            value={loginPin}
+            onChange={(e) => setLoginPin(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleLogin();
+              }
+            }}
+            placeholder="PIN"
+            className="mb-2 w-full rounded border border-slate-700 bg-transparent px-2 py-1 text-xs outline-none focus:border-emerald-400"
+          />
+          {loginError && (
+            <p className="mb-2 text-[11px] text-red-400">{loginError}</p>
+          )}
+          {loginInfo && (
+            <p className="mb-2 text-[11px] text-emerald-300">{loginInfo}</p>
+          )}
+          <div className="flex justify-between items-center gap-2">
+            <button
+              type="button"
+              onClick={handleForgotPin}
+              className="rounded px-2 py-1 text-[11px] hover:bg-slate-800/60"
+            >
+              Forgot PIN?
+            </button>
+            <button
+              type="button"
+              onClick={handleLogin}
+              className="rounded bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -144,13 +238,25 @@ const App: React.FC = () => {
             Owner help
           </button>
           {userRole === "OWNER" && (
-            <button
-              type="button"
-              onClick={handleLowStockReport}
-              className="rounded px-2 py-1 hover:bg-slate-800/60"
-            >
-              Send low stock report
-            </button>
+            <>
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="opacity-70">Low stock &lt;=</span>
+                <input
+                  type="number"
+                  value={lowStockThreshold}
+                  onChange={(e) => setLowStockThreshold(e.target.value)}
+                  className="w-12 rounded border border-slate-700 bg-transparent px-1 py-0.5 text-[11px] outline-none focus:border-emerald-400"
+                />
+                <span className="opacity-70">units</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleLowStockReport}
+                className="rounded px-2 py-1 hover:bg-slate-800/60"
+              >
+                Send low stock report
+              </button>
+            </>
           )}
         </nav>
       </header>
