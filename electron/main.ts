@@ -7,6 +7,9 @@ import {
 } from "./services/InventoryService";
 import { UserService } from "./services/UserService";
 import { ProductService } from "./services/ProductService";
+import { PaymentService } from "./services/PaymentService";
+import { PrinterService } from "./services/PrinterService";
+import { ReceiptService } from "./services/ReceiptService";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -17,6 +20,9 @@ const prisma = new PrismaClient();
 const inventoryService = new InventoryService(prisma);
 const userService = new UserService(prisma);
 const productService = new ProductService(prisma);
+const paymentService = new PaymentService();
+const printerService = new PrinterService();
+const receiptService = new ReceiptService(prisma, printerService);
 
 async function initDatabase() {
   await prisma.$connect();
@@ -107,3 +113,26 @@ ipcMain.handle("user:login", async (_event, pin: string) => {
 ipcMain.handle("product:search", async (_event, query: string) => {
   return productService.searchProducts(query);
 });
+
+// Payments: M-Pesa STK.
+ipcMain.handle(
+  "payment:initiateSTK",
+  async (_event, payload: { phone: string; amount: number }) => {
+    return paymentService.initiateSTK(payload.phone, payload.amount);
+  }
+);
+
+ipcMain.handle(
+  "payment:checkStatus",
+  async (_event, checkoutRequestId: string) => {
+    return paymentService.checkStatus(checkoutRequestId);
+  }
+);
+
+// Printing: sale receipt by sale ID.
+ipcMain.handle(
+  "printer:printSaleReceipt",
+  async (_event, saleId: number) => {
+    return receiptService.printSaleReceipt(saleId);
+  }
+);
