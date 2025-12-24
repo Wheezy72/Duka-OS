@@ -25,6 +25,8 @@ const productService = new ProductService(prisma);
 const paymentService = new PaymentService();
 const printerService = new PrinterService();
 const receiptService = new ReceiptService(prisma, printerService);
+const whatsappService = new WhatsAppService();
+const notificationService = new NotificationService(prisma, whatsappService);
 
 async function initDatabase() {
   await prisma.$connect();
@@ -115,8 +117,7 @@ ipcMain.handle(
   ) => {
     return inventoryService.receiveStock(payload.entries);
   }
-);
-
+);>
 // User login by PIN.
 ipcMain.handle("user:login", async (_event, pin: string) => {
   return userService.loginWithPin(pin);
@@ -155,7 +156,7 @@ ipcMain.handle(
   }
 );
 
-// Payments: M-Pesa STK.
+// Payments: M-Pesa STK (single default channel for now).
 ipcMain.handle(
   "payment:initiateSTK",
   async (_event, payload: { phone: string; amount: number }) => {

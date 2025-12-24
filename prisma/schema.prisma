@@ -42,13 +42,25 @@ model Product {
 }
 
 model Sale {
-  id            Int           @id @default(autoincrement())
-  total         Float
-  paymentMethod PaymentMethod
-  isSynced      Boolean       @default(false)
-  createdAt     DateTime      @default(now())
+  id               Int           @id @default(autoincrement())
+  total            Float
+  paymentMethod    PaymentMethod
+  paymentChannelId Int?
+  paymentChannel   MpesaChannel? @relation(fields: [paymentChannelId], references: [id])
+  isSynced         Boolean       @default(false)
+  createdAt        DateTime      @default(now())
 
   items SaleItem[]
+}
+
+model MpesaChannel {
+  id        Int    @id @default(autoincrement())
+  name      String // e.g. "KCB Till", "Equity Till"
+  shortCode String
+  passkey   String
+  isDefault Boolean @default(false)
+
+  sales Sale[]
 }
 
 model SaleItem {

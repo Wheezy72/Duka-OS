@@ -38,6 +38,11 @@ const api = {
   },
   user: {
     login: (pin: string) => ipcRenderer.invoke("user:login", pin),
+    create: (pin: string, role: "OWNER" | "CASHIER") =>
+      ipcRenderer.invoke("user:create", { pin, role }) as Promise<{
+        id: number;
+        role: "OWNER" | "CASHIER";
+      }>,
   },
   notify: {
     sendLowStockReport: (threshold?: number) =>

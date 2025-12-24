@@ -12,6 +12,10 @@ declare global {
     duka: {
       user: {
         login: (pin: string) => Promise<{ role: UserRole }>;
+        create: (pin: string, role: "OWNER" | "CASHIER") => Promise<{
+          id: number;
+          role: "OWNER" | "CASHIER";
+        }>;
       };
       notify: {
         sendLowStockReport: (threshold?: number) => Promise<void>;
@@ -34,6 +38,13 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginInfo, setLoginInfo] = useState<string | null>(null);
   const [lowStockThreshold, setLowStockThreshold] = useState<string>("5");
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [loginLockedUntil, setLoginLockedUntil] = useState<number | null>(null);
+  const [showUserCreate, setShowUserCreate] = useState(false);
+  const [newUserPin, setNewUserPin] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"OWNER" | "CASHIER">("CASHIER");
+  const [newUserError, setNewUserError] = useState<string | null>(null);
+  const [newUserInfo, setNewUserInfo] = useState<string | null>(null);
 
   const requireOwnerFor = (target: Screen) => {
     if (userRole === "OWNER") {
@@ -100,6 +111,14 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async () => {
+    const now = Date.now();
+    if (loginLockedUntil && now < loginLockedUntil) {
+      setLoginError(
+        "Too many wrong PIN attempts. Please wait a bit before trying again."
+      );
+      return;
+    }
+
     const pin = loginPin.trim();
     if (!pin) {
       setLoginError("Enter your PIN.");
@@ -112,11 +131,22 @@ const App: React.FC = () => {
       if (result.role === "OWNER" || result.role === "CASHIER") {
         setUserRole(result.role);
         setScreen("POS");
+        setLoginAttempts(0);
+        setLoginLockedUntil(null);
       } else {
         setLoginError("Unknown user role.");
       }
     } catch {
-      setLoginError("Incorrect PIN or login error.");
+      const attempts = loginAttempts + 1;
+      setLoginAttempts(attempts);
+      if (attempts >= 5) {
+        setLoginLockedUntil(Date.now() + 30_000); // 30 seconds
+        setLoginError(
+          "Too many wrong PIN attempts. Please wait 30 seconds before trying again."
+        );
+      } else {
+        setLoginError("Incorrect PIN or login error.");
+      }
     }
   };
 
@@ -239,6 +269,19 @@ const App: React.FC = () => {
           </button>
           {userRole === "OWNER" && (
             <>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewUserPin("");
+                  setNewUserRole("CASHIER");
+                  setNewUserError(null);
+                  setNewUserInfo(null);
+                  setShowUserCreate(true);
+                }}
+                className="rounded px-2 py-1 hover:bg-slate-800/60"
+              >
+                Add user
+              </button>
               <div className="flex items-center gap-1 text-[11px]">
                 <span className="opacity-70">Low stock &lt;=</span>
                 <input
@@ -309,6 +352,72 @@ const App: React.FC = () => {
                 className="rounded bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
               >
                 Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showUserCreate && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-xs rounded-lg border border-slate-700 bg-slate-900 p-4 text-xs shadow-lg">
+            <h2 className="mb-2 text-sm font-semibold">Add user</h2>
+            <p className="mb-2 text-[11px] opacity-70">
+              Create a new user PIN. For now we only track role (Owner or Cashier).
+            </p>
+            <div className="mb-2 flex items-center gap-2 text-[11px]">
+              <span>Role:</span>
+              <select
+                value={newUserRole}
+                onChange={(e) =>
+                  setNewUserRole(e.target.value as "OWNER" | "CASHIER")
+                }
+                className="rounded border border-slate-700 bg-transparent px-2 py-1 text-[11px] outline-none focus:border-emerald-400"
+              >
+                <option value="CASHIER">Cashier</option>
+                <option value="OWNER">Owner</option>
+              </select>
+            </div>
+            <input
+              type="password"
+              value={newUserPin}
+              onChange={(e) => setNewUserPin(e.target.value)}
+              className="mb-2 w-full rounded border border-slate-700 bg-transparent px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              placeholder="New PIN (4–6 digits)"
+            />
+            {newUserError && (
+              <p className="mb-2 text-[11px] text-red-400">{newUserError}</p>
+            )}
+            {newUserInfo && (
+              <p className="mb-2 text-[11px] text-emerald-300">
+                {newUserInfo}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUserCreate(false)}
+                className="rounded px-2 py-1 hover:bg-slate-800/60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setNewUserError(null);
+                  setNewUserInfo(null);
+                  try {
+                    await window.duka.user.create(newUserPin, newUserRole);
+                    setNewUserInfo("User created successfully.");
+                    setNewUserPin("");
+                  } catch (err: any) {
+                    setNewUserError(
+                      err?.message || "Failed to create user. Check PIN strength."
+                    );
+                  }
+                }}
+                className="rounded bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+              >
+                Save
               </button>
             </div>
           </div>
