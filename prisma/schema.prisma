@@ -8,23 +8,6 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-enum PaymentMethod {
-  CASH
-  MPESA
-}
-
-enum UserRole {
-  OWNER
-  CASHIER
-}
-
-enum StockEventReason {
-  SALE
-  BULK_BREAK_SOURCE
-  BULK_BREAK_DEST
-  RESTOCK
-}
-
 model Product {
   id               Int       @id @default(autoincrement())
   name             String
@@ -44,7 +27,7 @@ model Product {
 model Sale {
   id               Int           @id @default(autoincrement())
   total            Float
-  paymentMethod    PaymentMethod
+  paymentMethod    String        // "CASH" or "MPESA"
   paymentChannelId Int?
   paymentChannel   MpesaChannel? @relation(fields: [paymentChannelId], references: [id])
   isSynced         Boolean       @default(false)
@@ -74,18 +57,18 @@ model SaleItem {
 }
 
 model StockEvent {
-  id        Int              @id @default(autoincrement())
-  product   Product          @relation(fields: [productId], references: [id])
+  id        Int      @id @default(autoincrement())
+  product   Product  @relation(fields: [productId], references: [id])
   productId Int
-  delta     Float            // Positive for stock in, negative for stock out.
-  reason    StockEventReason
-  createdAt DateTime         @default(now())
+  delta     Float    // Positive for stock in, negative for stock out.
+  reason    String   // "SALE", "BULK_BREAK_SOURCE", "BULK_BREAK_DEST", "RESTOCK"
+  createdAt DateTime @default(now())
 }
 
 model User {
-  id      Int      @id @default(autoincrement())
-  pinHash String   // Hashed PIN so we never store raw codes.
-  role    UserRole
+  id      Int    @id @default(autoincrement())
+  pinHash String // Hashed PIN so we never store raw codes.
+  role    String // "OWNER" or "CASHIER"
 
   shifts Shift[]
 }
