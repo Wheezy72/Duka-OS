@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 
 /**
@@ -31,7 +31,7 @@ async function main() {
     update: {},
     create: {
       pinHash: hashPin(ownerPin),
-      role: UserRole.OWNER,
+      role: "OWNER",
     },
   });
 
@@ -40,7 +40,7 @@ async function main() {
     update: {},
     create: {
       pinHash: hashPin(cashierPin),
-      role: UserRole.CASHIER,
+      role: "CASHIER",
     },
   });
 
