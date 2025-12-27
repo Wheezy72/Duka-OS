@@ -79,6 +79,9 @@ const api = {
     printSaleReceipt: (saleId: number) =>
       ipcRenderer.invoke("printer:printSaleReceipt", saleId) as Promise<void>,
   },
+  drawer: {
+    open: () => ipcRenderer.invoke("drawer:open") as Promise<void>,
+  },
 };
 
 contextBridge.exposeInMainWorld("duka", api);

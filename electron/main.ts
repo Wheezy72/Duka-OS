@@ -183,6 +183,11 @@ ipcMain.handle(
   }
 );
 
+// Attempt to open the cash drawer via the receipt printer.
+ipcMain.handle("drawer:open", async () => {
+  return printerService.openCashDrawer();
+});
+
 // Notifications: low stock report via WhatsApp.
 ipcMain.handle(
   "notify:lowStock",

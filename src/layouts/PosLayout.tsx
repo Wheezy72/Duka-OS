@@ -54,6 +54,9 @@ declare global {
       printer: {
         printSaleReceipt: (saleId: number) => Promise<void>;
       };
+      drawer: {
+        open: () => Promise<void>;
+      };
     };
   }
 }
@@ -251,6 +254,13 @@ export const PosLayout: React.FC = () => {
         setPayError(
           "Sale saved but printing failed. Check the receipt printer."
         );
+      }
+
+      // Try to open the cash drawer; this is best-effort and never blocks the sale.
+      try {
+        await window.duka.drawer.open();
+      } catch {
+        // Non-fatal; drawer may not be connected or configured.
       }
 
       setCart([]);
