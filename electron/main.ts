@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
+import { WhatsAppService } from "./services/WhatsAppService";
+import { NotificationService } from "./services/NotificationService";
 import {
   InventoryService,
   ProcessSaleInput,
@@ -10,6 +12,7 @@ import { ProductService } from "./services/ProductService";
 import { PaymentService } from "./services/PaymentService";
 import { PrinterService } from "./services/PrinterService";
 import { ReceiptService } from "./services/ReceiptService";
+import { ReportService } from "./services/ReportService";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -23,6 +26,8 @@ const productService = new ProductService(prisma);
 const paymentService = new PaymentService();
 const printerService = new PrinterService();
 const receiptService = new ReceiptService(prisma, printerService);
+const whatsappService = new WhatsAppService();
+const notificationService = new NotificationService(prisma, whatsappService);
 
 async function initDatabase() {
   await prisma.$connect();
@@ -40,6 +45,9 @@ async function createWindow() {
     webPreferences: {
       // Preload is where the IPC bridge lives – Renderer never sees Prisma.
       preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
     },
   });
 
@@ -104,6 +112,16 @@ ipcMain.handle(
   }
 );
 
+// Receive stock into inventory (e.g. deliveries).
+ipcMain.handle(
+  "stock:receive",
+  async (
+    _event,
+    payload: { entries: { productId: number; quantity: number }[] }
+  ) => {
+    return inventoryService.receiveStock(payload.entries);
+  }
+);>
 // User login by PIN.
 ipcMain.handle("user:login", async (_event, pin: string) => {
   return userService.loginWithPin(pin);
@@ -114,7 +132,35 @@ ipcMain.handle("product:search", async (_event, query: string) => {
   return productService.searchProducts(query);
 });
 
-// Payments: M-Pesa STK.
+// Scan lookup tuned for barcode scanners.
+ipcMain.handle("product:scanLookup", async (_event, term: string) => {
+  return productService.scanLookup(term);
+});
+
+// Create a simple ad-hoc product (e.g. avocados from your tree).
+ipcMain.handle(
+  "product:createCustom",
+  async (_event, payload: { name: string; price: number }) => {
+    return productService.createCustomProduct(payload.name, payload.price);
+  }
+);
+
+// Upsert a basic catalog product from a scanned barcode.
+ipcMain.handle(
+  "product:upsertBasic",
+  async (
+    _event,
+    payload: { barcode: string; name: string; price: number }
+  ) => {
+    return productService.upsertBasicProduct(
+      payload.barcode,
+      payload.name,
+      payload.price
+    );
+  }
+);
+
+// Payments: M-Pesa STK (single default channel for now).
 ipcMain.handle(
   "payment:initiateSTK",
   async (_event, payload: { phone: string; amount: number }) => {
@@ -136,3 +182,28 @@ ipcMain.handle(
     return receiptService.printSaleReceipt(saleId);
   }
 );
+
+// Attempt to open the cash drawer via the receipt printer.
+ipcMain.handle("drawer:open", async () => {
+  return printerService.openCashDrawer();
+});
+
+// Notifications: low stock report via WhatsApp.
+ipcMain.handle(
+  "notify:lowStock",
+  async (_event, threshold?: number) => {
+    return notificationService.sendLowStockReport(
+      typeof threshold === "number" ? threshold : undefined
+    );
+  }
+);>
+// Notifications: owner help request (e.g. forgotten PIN).
+ipcMain.handle(
+  "notify:ownerHelp",
+  async (_event, context?: string) => {
+    return notificationService.sendOwnerHelpRequest(context);
+  }
+);
+
+// Reports: daily summary and CSV export.
+ipcMain.handle);

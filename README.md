@@ -11,18 +11,18 @@ Think of it as a **digital counter book** + **reliable cash register** + **M-Pes
 ### 1. Helps You Sell Fast
 
 - Left side: **Products**
-  - Big buttons for your items (flour, sugar, bread, etc.).
-  - Tap to add to the cart.
+  - Scan with a barcode scanner into the “Scan barcode” box.
+  - Or tap quick buttons for common items (sukuma, bread, etc.).
 - Right side: **Cart & Payment**
   - Shows what the customer is buying.
   - Shows the **total** clearly.
   - Buttons for:
-    - **Pay Cash**
-    - **Pay with M-Pesa**
+    - **Pay Cash** (opens cash drawer, prints receipt).
+    - **Pay with M-Pesa** (STK push, no drawer open).
 
 The layout is designed so cashiers can build **muscle memory**:
-- Left hand taps products.
-- Right side handles money.
+- Left hand scans or taps products.
+- Right side handles the money.
 
 ---
 
@@ -30,28 +30,29 @@ The layout is designed so cashiers can build **muscle memory**:
 
 ### Cash
 
-1. Add items to the cart.
+1. Scan or add items to the cart.
 2. Tap **Pay Cash**.
 3. Duka-OS:
    - Saves the sale.
    - Updates stock.
    - Prints a receipt (if the printer is connected).
+   - Sends a pulse to open the **cash drawer** (via the receipt printer).
 
-If the printer is off or unplugged:
+If the printer or drawer is off or unplugged:
 - The sale is still saved.
-- Duka-OS will tell you the receipt failed to print.
+- Duka-OS will say printing failed, but it **will not cancel** the sale.
 
 ---
 
 ### M-Pesa (STK Push)
 
-1. Add items to the cart.
+1. Scan or add items to the cart.
 2. Enter the customer’s **M-Pesa number** (e.g. `07xx...`).
 3. Tap **Pay with M-Pesa**.
 4. The customer gets the normal **M-Pesa popup** on their phone.
 
 After that:
-- Tap **Check Status** in Duka-OS to see what happened.
+- Tap **Check Status** to see what happened.
 
 Possible messages:
 
@@ -59,6 +60,7 @@ Possible messages:
   - Duka-OS:
     - Saves the sale as an M-Pesa payment.
     - Prints a receipt.
+    - **Does not** open the cash drawer (no cash is changing hands).
 - **Still pending**
   - Duka-OS tells you it’s still processing.
   - Ask the customer to check their phone.
@@ -103,11 +105,13 @@ This means:
 
 ## 🧾 Receipts
 
-Duka-OS can print **simple, clean receipts** on a small USB thermal printer.
+Duka-OS prints **simple, clean receipts** on a small USB thermal printer.
 
 A receipt includes:
 
-- Header: **“DUKA OS”** centered at the top.
+- Header:
+  - Your shop name from `DUKA_NAME` (e.g. “MY MINI MART”).
+  - Optional contact line from `DUKA_CONTACT` (e.g. phone / location).
 - List of items:
   - Name and quantity (e.g. `Sugar 1kg x2`).
   - Price per item and total per line.
@@ -120,7 +124,23 @@ If the printer is not found:
 
 ---
 
-## ▶️ How to Run Duka-OS (Simple View)
+## 📊 Reports (for the Owner)
+
+There is an **Owner-only Reports tab**:
+
+- Pick a date.
+- See:
+  - **Total sales** for that day.
+  - **Total Cash**.
+  - **Total M-Pesa**.
+  - **Number of sales**.
+- Tap **Download CSV**:
+  - Duka-OS exports a CSV file (e.g. `exports/sales-2025-01-15.csv`).
+  - You can open it in Excel or share with an accountant.
+
+---
+
+## ▶️ How to Run Duka-OS on Your Machine
 
 This is a simple checklist for the **shop owner** and the **tech person** helping them.
 
@@ -130,18 +150,20 @@ Ask your tech person to:
 
 1. **Install Duka-OS on the shop computer.**
 2. **Connect the receipt printer** with a USB cable.
-3. **Check that M-Pesa is working**:
+3. **Connect the cash drawer** to the receipt printer (if you have one).
+4. **Check that M-Pesa is working**:
    - Do a test sale for a small amount.
    - Confirm on your phone that the money arrived.
-4. **Show your staff**:
-   - How to add items.
+5. **Show your staff**:
+   - How to scan items.
    - How to take cash.
    - How to take M-Pesa.
    - How to read the messages on the right side.
+   - How to log in / log out.
 
 After that:
 - You just open the Duka-OS app like any other program.
-- Log in (if you have user accounts set up).
+- Log in with your PIN.
 - Start selling.
 
 You don’t need to touch any “code” or “commands”.  
@@ -149,104 +171,174 @@ That’s what the tech person is for.
 
 ---
 
-### B. For the Tech Person (High Level, No Deep Tech)
+### B. For the Tech Person – Step-by-Step Setup
 
-You don’t need to be a full programmer, but you should be comfortable installing apps.
+You don’t need to be a full programmer, but you should be comfortable with a terminal.
 
-1. **Get the project**
-   - Download or clone the Duka-OS project to a folder on the computer.
+#### 1. Get the code
 
-2. **Install requirements**
-   - Install:
-     - Node.js (for the app itself).
-     - Git (to pull updates, optional but useful).
-   - In the project folder, install dependencies (once):
+Clone or download the Duka-OS project:
 
-     ```bash
-     npm install
-     ```
+```bash
+git clone <repo-url> duka-os
+cd duka-os
+```
 
-3. **Set up the database**
-   - In the same folder:
+#### 2. Install dependencies
 
-     ```bash
-     npx prisma migrate dev
-     ```
+You need:
 
-   - This creates the local database file used by Duka-OS.
+- Node.js (LTS is fine).
+- npm (comes with Node).
 
-4. **Configure M-Pesa (optional but recommended)**
-   - Ask the shop owner for their Safaricom M-Pesa credentials (from the Safaricom portal).
-   - Put them in a `.env` file (or however you usually store env variables):
+In the project folder:
 
-     - `MPESA_KEY`
-     - `MPESA_SECRET`
-     - `MPESA_SHORT_CODE`
-     - `MPESA_PASSKEY`
-     - `MPESA_CALLBACK_URL` (can be via ngrok in testing)
+```bash
+npm install
+```
 
-5. **Run the app in development mode**
+#### 3. Configure environment variables
 
-   ```bash
-   npm run dev
-   ```
+Create a `.env` file in the project root (next to `package.json`) and set:
 
-   - This should:
-     - Open the Duka-OS window.
-     - Show the POS layout.
-     - Let you test sales and receipts.
+**Branding:**
 
-6. **Set up the receipt printer**
-   - Plug in the USB thermal printer.
-   - If printing fails, open `DEV_GUIDE.md` and follow:
-     - “Printer Not Found?” section to set the correct Vendor ID / Product ID.
+```env
+DUKA_NAME=My Mini Mart
+DUKA_CONTACT=0712 345 678 - Market Rd
+```
 
-7. **(Optional) Package it**
-   - If you want a single installer for Windows/macOS later:
-     - You can use Electron packaging tools (this is more advanced and can be added when needed).
+**M-Pesa (Safaricom portal gives you these):**
 
-For detailed technical steps (for developers), see **`DEV_GUIDE.md`** in this project.
+```env
+MPESA_KEY=...
+MPESA_SECRET=...
+MPESA_SHORT_CODE=...
+MPESA_PASSKEY=...
+MPESA_CALLBACK_URL=https://your-callback-url
+```
+
+**WhatsApp (for owner alerts):**
+
+```env
+WHATSAPP_ACCESS_TOKEN=...
+WHATSAPP_PHONE_NUMBER_ID=...
+WHATSAPP_OWNER_NUMBER=2547XXXXXXXX
+```
+
+You can skip M-Pesa and WhatsApp in early testing; Duka-OS will just show errors when those features are used.
+
+#### 4. Set up the database
+
+Run Prisma migrations:
+
+```bash
+npx prisma migrate dev
+```
+
+This creates `prisma/dev.db` with the schema (products, sales, users, stock, etc.).
+
+#### 5. Seed mock data (so the UI isn’t empty)
+
+Use the seed script to create:
+
+- An OWNER user (PIN `8453`).
+- A CASHIER user (PIN `5629`).
+- Some common products with barcodes and stock.
+
+```bash
+npx ts-node scripts/seedMockData.ts
+```
+
+It will print the IDs and PINs so you know what to use for testing.
+
+#### 6. Run a quick health check
+
+Optional, but useful:
+
+```bash
+npx ts-node scripts/checkHealth.ts
+```
+
+You should see:
+
+- DB connected.
+- Counts of products, users, sales.
+- Some info about M-Pesa and WhatsApp setup (or warnings if env is missing).
+
+#### 7. Run the app in development mode
+
+```bash
+npm run dev
+```
+
+This should:
+
+- Start the Electron app.
+- Open a window with the **Duka-OS Login** screen.
+
+Log in with:
+
+- OWNER PIN: `8453`
+- CASHIER PIN: `5629`
+
+#### 8. Set up the receipt printer and cash drawer
+
+- Plug in the USB thermal printer.
+- Connect the cash drawer to the printer (RJ11 jack).
+
+If printing fails:
+
+- Open `DEV_GUIDE.md`.
+- Follow the “Printer not found?” section to set:
+
+  - `PRINTER_VENDOR_ID`
+  - `PRINTER_PRODUCT_ID`
+
+inside `PrinterService.ts` to match your actual device.
+
+Drawer:
+
+- The drawer will open automatically after successful **cash** payments (not M-Pesa), if your printer supports the `ESC p` command.
 
 ---
 
-## 👩‍👩‍👦 For the Shop Owner
+## 👩‍👩‍👦 For the Shop Owner (Everyday Use)
 
-Duka-OS is designed for:
+You’ll mostly do:
 
-- **Dukas**
-- **Mini supermarkets**
-- **Kiosks**
-- **Small shops with many repeat customers**
+- Open the app.
+- Enter your PIN:
+  - OWNER for full access.
+  - CASHIER for POS only.
+- Sell:
 
-It helps you:
+  - Scan items or tap quick buttons.
+  - For cash:
+    - Tap **Pay Cash**.
+    - Receipt prints, drawer opens.
+  - For M-Pesa:
+    - Enter number, tap **Pay with M-Pesa**, then **Check Status**.
+    - Drawer stays closed.
 
-- See what is being sold.
-- Track stock, even when selling from sacks.
-- Keep a clean record for:
-  - Cash
-  - M-Pesa
-- Survive:
-  - **Power cuts** (special database mode for safer saving).
-  - **Slow internet** (M-Pesa manual verification mode).
-
-You don’t need to understand how it’s built.  
-You just need to know:
-
-- It **remembers your sales**.
-- It **prints receipts**.
-- It **respects your reality** (power, network, M-Pesa quirks).
+- Owner-only actions:
+  - Product Setup (teach Duka-OS new barcodes).
+  - Receive Stock (record deliveries).
+  - Reports (see daily totals, download CSV).
+  - Add user (new PINs for staff).
+  - Send low-stock report (WhatsApp).
 
 ---
 
 ## 👨‍💻 For the Technician / Developer
 
-If you want the full technical map:
+For the full internals:
 
-- Read **`DEV_GUIDE.md`** (in the same folder as this README).
-- It explains:
+- Read **`DEV_GUIDE.md`** – it covers:
   - Folder structure.
-  - How data flows inside the app.
-  - How to fix common issues.
+  - Services (Inventory, Payment, Reporting, Printer, WhatsApp).
+  - IPC wiring.
+  - How to debug common issues (printer, M-Pesa, DB locking).
 
 ---
 
@@ -259,15 +351,17 @@ Kenyan shops deal with:
 - Customers paying by:
   - Cash.
   - M-Pesa.
-  - Sometimes both.
-- Stock in strange units:
-  - Sacks, pieces, loose grams, etc.
+- Stock in tricky units:
+  - Sacks, pieces, scoops, etc.
 
 Duka-OS is built to **respect that reality**:
 
-- It’s okay if stock goes negative — it doesn’t just block sales.
-- It never hides M-Pesa failures behind fancy messages.
-- It tries to **stay out of the way** and let you serve customers.
+- Negative stock is allowed (sales don’t block just because you forgot to “receive stock”).
+- M-Pesa failures are not hidden behind vague messages.
+- Everything can be traced:
+  - Who sold what.
+  - What stock moved.
+  - When low stock alerts were sent.
 
 ---
 
@@ -277,8 +371,9 @@ If you’re non-technical, just remember:
 
 - **Left side:** “What the customer is buying.”
 - **Right side:** “How they are paying.”
-- **Printer:** “What goes in their hand.”
+- **Printer & drawer (cash):** “What goes in their hand and when you need change.”
 - **M-Pesa messages:** “What keeps you safe from confusion and double charges.”
+- **Reports:** “What lets you sleep at night knowing the numbers add up.”
 
 Everything else is there so that:
 

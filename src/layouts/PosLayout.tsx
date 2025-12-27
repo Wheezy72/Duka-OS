@@ -17,6 +17,13 @@ declare global {
     duka: {
       product: {
         search: (query: string) => Promise<ProductSummary[]>;
+        scanLookup: (term: string) => Promise<ProductSummary | null>;
+        createCustom: (name: string, price: number) => Promise<ProductSummary>;
+        upsertBasic: (
+          barcode: string,
+          name: string,
+          price: number
+        ) => Promise<ProductSummary>;
       };
       sale: {
         create: (payload: {
@@ -46,6 +53,9 @@ declare global {
       };
       printer: {
         printSaleReceipt: (saleId: number) => Promise<void>;
+      };
+      drawer: {
+        open: () => Promise<void>;
       };
     };
   }
@@ -98,7 +108,15 @@ export const PosLayout: React.FC = () => {
   const [isPaying, setIsPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
-  const [mpesaPhone, setMpesaPhone] = use);
+  const [scanInput, setScanInput] = useState("");
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+
+  const [mpesaPhone, setMpesaPhone] = useState("");
+  const [mpesaStatus, setMpesaStatus] = useState<string | null>(null);
+  const [mpesaCheckoutId, setMpesaCheckoutId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +148,27 @@ export const PosLayout: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  const handleScanSubmit = async () => {
+    const term = scanInput.trim();
+    if (!term) return;
+
+    setScanMessage(null);
+
+    try {
+      const product = await window.duka.product.scanLookup(term);
+
+      if (!product) {
+        setScanMessage("No product found. You can add it below as a custom item.");
+        return;
+      }
+
+      addToCart(product);
+      setScanInput("");
+    } catch (error: any) {
+      setScanMessage("Scan/search failed. Try again.");
+    }
+  };
 
   const addToCart = (product: ProductSummary) => {
     setCart((current) => {
@@ -170,6 +209,26 @@ export const PosLayout: React.FC = () => {
     setTheme(next);
   };
 
+  const handleCreateCustom = async () => {
+    const name = customName.trim();
+    const priceValue = Number(customPrice);
+
+    if (!name || !Number.isFinite(priceValue) || priceValue <= 0) {
+      setScanMessage("Enter a valid name and price for the custom item.");
+      return;
+    }
+
+    try {
+      const product = await window.duka.product.createCustom(name, priceValue);
+      addToCart(product);
+      setCustomName("");
+      setCustomPrice("");
+      setScanMessage(null);
+    } catch (error: any) {
+      setScanMessage("Failed to add custom item. Ask your tech to check logs.");
+    }
+  };
+
   const handleCashPay = async () => {
     if (cart.length === 0 || isPaying) return;
 
@@ -195,6 +254,13 @@ export const PosLayout: React.FC = () => {
         setPayError(
           "Sale saved but printing failed. Check the receipt printer."
         );
+      }
+
+      // Try to open the cash drawer; this is best-effort and never blocks the sale.
+      try {
+        await window.duka.drawer.open();
+      } catch {
+        // Non-fatal; drawer may not be connected or configured.
       }
 
       setCart([]);
@@ -306,15 +372,15 @@ export const PosLayout: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex ${theme}`}>
-      {/* LEFT: Product grid (high-usage area) */}
+      {/* LEFT: Product area – scan first, taps as shortcuts */}
       <section className="w-3/5 border-r border-slate-700/40 p-4 flex flex-col">
-        <header className="mb-4 flex items-center justify-between">
-          <div>
+        <header className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex-1">
             <h1 className="text-lg font-semibold tracking-tight">
               Duka POS
             </h1>
             <p className="text-xs opacity-70">
-              Tap products, keep the right side for money.
+              Scan barcodes, or tap common items.
             </p>
           </div>
           <button
@@ -326,28 +392,85 @@ export const PosLayout: React.FC = () => {
           </button>
         </header>
 
+        <div className="mb-3 space-y-2 text-xs">
+          <div>
+            <label className="mb-1 block text-[11px]">
+              Scan barcode or search
+            </label>
+            <input
+              type="text"
+              value={scanInput}
+              onChange={(e) => setScanInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleScanSubmit();
+                }
+              }}
+              placeholder="Scan barcode or type name and hit Enter"
+              className="w-full rounded border border-slate-700/40 bg-transparent px-2 py-1 text-xs outline-none focus:border-emerald-400"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px]">
+              Custom item (e.g. avocado from your tree)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="Item name"
+                className="flex-1 rounded border border-slate-700/40 bg-transparent px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <input
+                type="number"
+                value={customPrice}
+                onChange={(e) => setCustomPrice(e.target.value)}
+                placeholder="Price"
+                className="w-24 rounded border border-slate-700/40 bg-transparent px-2 py-1 text-xs outline-none focus:border-emerald-400"
+              />
+              <button
+                type="button"
+                onClick={handleCreateCustom}
+                className="rounded bg-slate-700 px-3 py-1 text-[11px] font-semibold text-white"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+          {scanMessage && (
+            <p className="text-[11px] text-amber-400">{scanMessage}</p>
+          )}
+        </div>
+
         <div className="flex-1 overflow-auto">
           {productsLoading ? (
             <div className="text-xs opacity-70">Loading products…</div>
           ) : productsError ? (
             <div className="text-xs text-red-500">{productsError}</div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {products.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => addToCart(product)}
-                  className="flex flex-col items-start rounded-lg border border-slate-700/30 bg-slate-900/5 p-3 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                >
-                  <span className="line-clamp-2 text-xs font-medium">
-                    {product.name}
-                  </span>
-                  <span className="mt-2 text-sm font-semibold">
-                    KES {product.price.toFixed(2)}
-                  </span>
-                </button>
-              ))}
+            <div>
+              <p className="mb-2 text-[11px] opacity-70">
+                Quick buttons for common items
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                {products.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => addToCart(product)}
+                    className="flex flex-col items-start rounded-lg border border-slate-700/30 bg-slate-900/5 p-3 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                  >
+                    <span className="line-clamp-2 text-xs font-medium">
+                      {product.name}
+                    </span>
+                    <span className="mt-2 text-sm font-semibold">
+                      KES {product.price.toFixed(2)}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
