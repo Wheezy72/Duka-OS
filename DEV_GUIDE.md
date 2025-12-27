@@ -12,8 +12,26 @@ This guide gives you enough context to safely extend the system without breaking
 
 ## 1. Project Structure
 
-At the top level the project is split into three main areas:
+At the top level the project is split into a few main areas:
 
+```text
+.
+├── electron/          # Electron main process + services (business logic)
+│   ├── main.ts        # Boot sequence, IPC wiring, DB init
+│   └── services/      # Inventory, Payments, Printing, Auth, Products, Reports...
+├── prisma/            # Prisma schema & migrations (SQLite)
+│   └── schema.prisma
+├── src/               # Renderer (Vite + React + TypeScript)
+│   ├── main.tsx       # React entrypoint
+│   ├── App.tsx        # Top-level app shell + navigation + auth
+│   └── layouts/       # Screen layouts
+│       ├── PosLayout.tsx
+│       ├── ProductSetupLayout.tsx
+│       ├── StockReceiveLayout.tsx
+│       └── ReportsLayout.tsx
+└── scripts/           # One-off scripts (seed, health checks)
+    ├── seedMockData.ts
+    └── checkHealth.ts
 ```text
 .
 ├── electron/        # Electron main process + services (business logic)
@@ -31,49 +49,47 @@ At the top level the project is split into three main areas:
 
 - **`electron/main.ts`**
   - Boots Prisma/SQLite and configures WAL mode.
-  - Creates the `BrowserWindow`.
-  - Registers IPC handlers:
-    - `sale:create` → `InventoryService.processSale`
-    - `user:login` → `UserService.loginWithPin`
-    - `product:search` → `ProductService.searchProducts`
-    - `payment:initiateSTK` / `payment:checkStatus` → `PaymentService`
-    - `printer:printSaleReceipt` → `ReceiptService` → `PrinterService`
+  - Creates the `BrowserWindow` with secure defaults:
+    - `nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`.
+  - Registers IPC handlers (e.g. `sale:create`, `user:login`, `product:search`, `payment:initiateSTK`, `printer:printSaleReceipt`, `drawer:open`, `report:getDaily`, `report:exportDailyCsv`).
   - IPC handlers are **thin** – they just call service methods.
-
-- **`electron/preload.ts`**
-  - Runs in the preload context of the BrowserWindow.
-  - Exposes a safe API on `window.duka`:
-    - `window.duka.product.search(query)`
-    - `window.duka.sale.create(payload)`
-    - `window.duka.payment.initiateSTK(phone, amount)`
-    - `window.duka.payment.checkStatus(checkoutRequestId)`
-    - `window.duka.printer.printSaleReceipt(saleId)`
-  - Renderer never sees `ipcRenderer` directly; it talks only to `window.duka`.
 
 - **`electron/services/InventoryService.ts`**
   - Owns stock movement and sale creation logic.
   - Handles **bulk breaking** (e.g., sack → kilos) inside a single DB transaction.
   - Writes `StockEvent` rows for every stock change (forensic trail).
+  - Supports `receiveStock` (stock in) with `RESTOCK` StockEvents.
 
 - **`electron/services/PaymentService.ts`**
   - Handles M-Pesa STK Push (online payments).
   - Uses Safaricom’s REST APIs (sandbox vs production based on `NODE_ENV`).
-  - Returns explicit statuses and never auto-retries (to avoid double billing).
-  - Signals when **manual verification** is required (e.g. network issues).
+  - Returns explicit statuses and never auto-retries.
 
 - **`electron/services/PrinterService.ts`**
   - Talks directly to a USB thermal printer using raw bytes (via `usb`).
-  - Formats a simple receipt: header, items, total, “Thank You”.
+  - Formats a simple receipt:
+    - Header: shop name (`DUKA_NAME`) and contact (`DUKA_CONTACT`).
+    - Items, line totals, and `TOTAL`.
+    - Footer: “Thank You”.
+  - Can send an ESC/POS pulse to **open the cash drawer** via the printer (`openCashDrawer`).
   - Vendor/Product IDs are definable in code so techs can fix printers on-site.
 
 - **`electron/services/ReceiptService.ts`**
-  - Fetches a `Sale` with its `SaleItem`s and `Product`s from the DB.
-  - Hands that bundle to `PrinterService.printReceipt` to produce a paper receipt.
-  - Used by the `printer:printSaleReceipt` IPC handler.
+  - Fetches a sale with items/products from Prisma and calls `PrinterService.printReceipt`.
 
-- **Other services (examples)**
-  - `UserService` – PIN login using hashed PINs.
-  - `ProductService` – product search for the POS grid.
+- **`electron/services/NotificationService.ts`** + **`WhatsAppService.ts`**
+  - Wrap WhatsApp Cloud API for:
+    - Low-stock reports.
+    - Owner help requests (e.g. forgotten PIN).
+  - Use env vars: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_OWNER_NUMBER`.
+
+- **`electron/services/ReportService.ts`**
+  - Provides daily sales summaries and CSV exports.
+  - Uses `Sale` + `SaleItem` to calculate totals and save `exports/sales-YYYY-MM-DD.csv`.
+
+- **Other services**
+  - `UserService` – PIN login + user creation using hashed PINs (`sha256`).
+  - `ProductService` – product lookup, barcode scan lookup, custom products.
 
 ### 1.2 Prisma (Database Layer)
 
@@ -100,15 +116,58 @@ npx prisma generate
 
 ### 1.3 Renderer (React + Vite)
 
+- **`src/main.tsx`**
+  - React entrypoint that renders `App` into `#root`.
+
+- **`src/App.tsx`**
+  - Top-level app shell:
+    - Handles login screen (PIN).
+    - Tracks `userRole` (`OWNER` or `CASHIER`).
+    - Shows a header with:
+      - App name.
+      - “Logged in as: …” pill.
+      - Navigation tabs: POS, Product Setup, Receive Stock, Reports.
+      - Owner controls: Add user, low-stock threshold, “Send low stock report”, “Owner help”.
+      - Logout button.
+    - Routes to different layouts based on state (no React Router; just simple state).
+
 - **`src/layouts/PosLayout.tsx`**
-  - Main POS layout: **left** is product grid, **right** is cart and payment.
+  - Main POS layout:
+    - **Left**:
+      - Scan box: barcode scanner types here and hits Enter.
+      - Custom item section (for items without barcodes e.g. avocados from your tree).
+      - Quick grid of common items.
+    - **Right**:
+      - Cart, totals.
+      - M-Pesa number, Pay Cash, Pay with M-Pesa.
+      - Status messages for payments.
   - Uses a `useTheme` hook that toggles a root class on `<html>`.
   - Themes:
-    - `duka-dark` – calm night mode (`bg-slate-900 text-slate-100`).
-    - `high-vis` – for bright kiosks (`bg-black text-yellow-400 border-2 border-yellow-400`).
-    - `daylight` – neutral daytime theme (`bg-gray-100 text-gray-900`).
+    - `duka-dark` – calm night mode.
+    - `high-vis` – for bright kiosks.
+    - `daylight` – neutral daytime mode.
 
-You can wire the POS layout to IPC calls via the preload bridge (not covered here, but the rule is: **renderer → IPC → main → services → DB**).
+- **`src/layouts/ProductSetupLayout.tsx`**
+  - Owner screen to “teach” Duka-OS about new products using a barcode scanner:
+    - Scan a barcode.
+    - If known, shows existing name/price.
+    - If new, lets you enter name/price.
+    - Saves a `Product` with that barcode.
+
+- **`src/layouts/StockReceiveLayout.tsx`**
+  - Owner screen for receiving deliveries:
+    - Scan barcode.
+    - See product details.
+    - Enter units received.
+    - Calls `InventoryService.receiveStock` to update stock and write `RESTOCK` events.
+
+- **`src/layouts/ReportsLayout.tsx`**
+  - Owner screen for daily sales:
+    - Pick a date.
+    - See total sales, Cash total, M-Pesa total, and sale count.
+    - “Download CSV” button writes `exports/sales-YYYY-MM-DD.csv`.
+
+The rule is always: **renderer → preload (`window.duka`) → main (IPC) → services → DB**.
 
 ---
 
@@ -165,7 +224,34 @@ When a sale is processed:
 
 ---
 
-## 3. Database Models Overview
+## 3. Environment Variables
+
+Duka-OS relies on a few environment variables, especially for M-Pesa, WhatsApp, and receipt branding.
+
+### 3.1 Core
+
+- `NODE_ENV` – `development` or `production` (impacts M-Pesa base URL).
+
+### 3.2 Branding
+
+- `DUKA_NAME` – Shop name printed on receipts (e.g. `MY MINI MART`).
+- `DUKA_CONTACT` – Contact line printed on receipts (e.g. `0712 345 678 - Market Rd`).
+
+### 3.3 M-Pesa
+
+- `MPESA_KEY` – Safaricom consumer key.
+- `MPESA_SECRET` – Safaricom consumer secret.
+- `MPESA_SHORT_CODE` – Till/PayBill shortcode.
+- `MPESA_PASSKEY` – Passkey for STK push.
+- `MPESA_CALLBACK_URL` – Public HTTPS URL for M-Pesa callbacks (can be an `ngrok`/tunnel URL in dev).
+
+### 3.4 WhatsApp (Owner alerts)
+
+- `WHATSAPP_ACCESS_TOKEN` – WhatsApp Cloud API access token.
+- `WHATSAPP_PHONE_NUMBER_ID` – Phone number ID from Facebook/Meta.
+- `WHATSAPP_OWNER_NUMBER` – Owner’s WhatsApp phone in international format (e.g. `2547XXXXXXXX`).
+
+If WhatsApp variables are missing, Duka-OS will log warnings and features like “Owner help” and low-stock reports will fail gracefully instead of crashing.Database Models Overview
 
 Summarised from `schema.prisma`:
 
