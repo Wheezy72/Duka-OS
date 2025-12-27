@@ -1,4 +1,4 @@
-import { PrismaClient, PaymentMethod } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { InventoryService } from "./InventoryService";
 
 /**
@@ -79,7 +79,7 @@ async function run() {
           unitPrice: child.price,
         },
       ],
-      paymentMethod: PaymentMethod.CASH,
+      paymentMethod: "CASH",
     });
 
     const parentAfter = await prisma.product.findUnique({

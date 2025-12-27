@@ -1,4 +1,4 @@
-import { PrismaClient, PaymentMethod, StockEventReason } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 export interface SaleItemInput {
   productId: number;
@@ -8,7 +8,8 @@ export interface SaleItemInput {
 
 export interface ProcessSaleInput {
   items: SaleItemInput[];
-  paymentMethod: PaymentMethod;
+  paymentMethod: "CASH" | "MPESA_code";new
+</}
 }
 
 /**
