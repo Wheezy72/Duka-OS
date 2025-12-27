@@ -297,12 +297,12 @@ const App: React.FC = () => {
             onClick={handleOwnerHelp}
             className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-slate-800/60"
           >
-            <span className="inline-block h-2 w-2 rounded-full border border-slate-300" />
-            <span>Owner help</span>
-          </button>
+           <<span className="inline-block h-2 w-2 rounded-full border border-slate-300" />
+           <<span>Owner he</</span>
+        </</button>
           {userRole === "OWNER" && (
             <>
-              <button
+             <<button
                 type="button"
                 onClick={() => {
                   setNewUserPin("");
