@@ -1,5 +1,5 @@
-import { PrismaClient, UserRole } from "@prisma/client";
-import crypto from "crypto";
+const { PrismaClient } = require("@prisma/client");
+const crypto = require("crypto");
 
 /**
  * seedMockData populates the dev database with:
@@ -8,14 +8,14 @@ import crypto from "crypto";
  * - Some basic stock levels.
  *
  * Run with:
- *   npx ts-node scripts/seedMockData.ts
+ *   node scripts/seedMockData.js
  *
  * Make sure you've run `npx prisma migrate dev` first.
  */
 
 const prisma = new PrismaClient();
 
-function hashPin(pin: string): string {
+function hashPin(pin) {
   return crypto.createHash("sha256").update(pin).digest("hex");
 }
 
@@ -31,7 +31,7 @@ async function main() {
     update: {},
     create: {
       pinHash: hashPin(ownerPin),
-      role: UserRole.OWNER,
+      role: "OWNER",
     },
   });
 
@@ -40,7 +40,7 @@ async function main() {
     update: {},
     create: {
       pinHash: hashPin(cashierPin),
-      role: UserRole.CASHIER,
+      role: "CASHIER",
     },
   });
 

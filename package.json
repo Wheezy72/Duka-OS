@@ -1,0 +1,54 @@
+{
+  "name": "duka-os",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Duka-OS – Retail Operating System for Kenyan shops",
+  "main": "electron/main.ts",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron -r ts-node/register ./electron/main.ts",
+    "build": "vite build",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate",
+    "seed": "ts-node scripts/seedMockData.ts",
+    "health": "ts-node scripts/checkHealth.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "electron": "^28.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "usb": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.37",
+    "@types/react-dom": "^18.0.11",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.0.0",
+    "electron-builder": "^26.0.12",
+    "prisma": "^5.10.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.4",
+    "vite": "^5.0.0",
+    "wait-on": "^7.0.1"
+  },
+  "build": {
+    "appId": "com.dukaos.app",
+    "productName": "Duka-OS",
+    "files": [
+      "dist/renderer/**",
+      "dist/main/**",
+      "prisma/**",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    }
+  }
+}
