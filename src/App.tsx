@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import PosLayout from "./layouts/PosLayout";
 import ProductSetupLayout from "./layouts/ProductSetupLayout";
 import StockReceiveLayout from "./layouts/StockReceiveLayout";
+import ReportsLayout from "./layouts/ReportsLayout";
 
-type Screen = "POS" | "PRODUCT_SETUP" | "STOCK_RECEIVE";
+type Screen = "POS" | "PRODUCT_SETUP" | "STOCK_RECEIVE" | "REPORTS";
 
 type UserRole = "OWNER" | "CASHIER" | null;
 
@@ -42,7 +43,8 @@ const App: React.FC = () => {
   const [loginLockedUntil, setLoginLockedUntil] = useState<number | null>(null);
   const [showUserCreate, setShowUserCreate] = useState(false);
   const [newUserPin, setNewUserPin] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"OWNER" | "CASHIER">("CASHIER");
+  const [newUserRole, setNewUserRole] =
+    useState<"OWNER" | "CASHIER">("CASHIER");
   const [newUserError, setNewUserError] = useState<string | null>(null);
   const [newUserInfo, setNewUserInfo] = useState<string | null>(null);
 
@@ -167,10 +169,11 @@ const App: React.FC = () => {
   };
 
   const renderScreen = () => {
-    if (screen === "PRODUCT_SETUP") return <ProductSetupLayout />;
-    if (screen === "STOCK_RECEIVE") return <StockReceiveLayout />;
-    return <PosLayout />;
-  };
+    if (screen === "PRODUCT_SETUP") retur <<ProductSetupLayout />;
+    if (screen === "STOCK_RECEIVE") retur <<StockReceiveLayout />;
+    if (screen === "REPORTS") retur <nReportsLayout />;
+    retur <nPosLayout />;_code
+ new;</ };
 
   if (!userRole) {
     return (
@@ -225,47 +228,77 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs">
-       <<div className="flex items-center gap-2">
-         <Sdiv className="font-semibold tracking-tight">Duka-</-2div>
-         < div className="rounded-full border border-slate-700/70 bg-slate-900/80 px-2 py-0.5 text-[11px] text          <button
+        <div className="flex items-center gap-2">
+          <div className="font-semibold tracking-tight">Duka-OS</div>
+          <div className="rounded-full border border-slate-700/70 bg-slate-900/80 px-2 py-0.5 text-[11px] text-slate-200">
+            Logged in as:{" "}
+            <span className="font-semibold">
+              {userRole === "OWNER"
+                ? "Owner"
+                : userRole === "CASHIER"
+                ? "Cashier"
+                : "Unknown"}
+            </span>
+          </div>
+        </div>
+        <nav className="flex items-center gap-2">
+          <button
             type="button"
             onClick={() => setScreen("POS")}
-            className={`rounded px-2 py-1 ${
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
               screen === "POS"
                 ? "bg-slate-800 text-emerald-300"
                 : "hover:bg-slate-800/60"
             }`}
           >
-            POS
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+            <span>POS</span>
           </button>
           <button
             type="button"
             onClick={() => requireOwnerFor("PRODUCT_SETUP")}
-            className={`rounded px-2 py-1 ${
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
               screen === "PRODUCT_SETUP"
                 ? "bg-slate-800 text-emerald-300"
                 : "hover:bg-slate-800/60"
             }`}
           >
-            Product Setup
+            <span className="inline-block h-2 w-2 border border-slate-300" />
+            <span>Product Setup</span>
           </button>
           <button
             type="button"
             onClick={() => requireOwnerFor("STOCK_RECEIVE")}
-            className={`rounded px-2 py-1 ${
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
               screen === "STOCK_RECEIVE"
                 ? "bg-slate-800 text-emerald-300"
                 : "hover:bg-slate-800/60"
             }`}
           >
-            Receive Stock
+            <span className="inline-block h-2 w-2 border-b border-l border-slate-300 rotate-[-45deg]" />
+            <span>Receive Stock</span>
           </button>
+          {userRole === "OWNER" && (
+            <button
+              type="button"
+              onClick={() => requireOwnerFor("REPORTS")}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 ${
+                screen === "REPORTS"
+                  ? "bg-slate-800 text-emerald-300"
+                  : "hover:bg-slate-800/60"
+              }`}
+            >
+              <span className="inline-block h-2 w-3 border-b border-slate-300" />
+              <span>Reports</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleOwnerHelp}
-            className="rounded px-2 py-1 hover:bg-slate-800/60"
+            className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-slate-800/60"
           >
-            Owner help
+            <span className="inline-block h-2 w-2 rounded-full border border-slate-300" />
+            <span>Owner help</span>
           </button>
           {userRole === "OWNER" && (
             <>
@@ -278,9 +311,10 @@ const App: React.FC = () => {
                   setNewUserInfo(null);
                   setShowUserCreate(true);
                 }}
-                className="rounded px-2 py-1 hover:bg-slate-800/60"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-slate-800/60"
               >
-                Add user
+                <span className="inline-block h-2 w-2 border border-slate-300" />
+                <span>Add user</span>
               </button>
               <div className="flex items-center gap-1 text-[11px]">
                 <span className="opacity-70">Low stock &lt;=</span>
@@ -295,9 +329,10 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={handleLowStockReport}
-                className="rounded px-2 py-1 hover:bg-slate-800/60"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-slate-800/60"
               >
-                Send low stock report
+                <span className="inline-block h-2 w-2 border-b border-slate-300" />
+                <span>Send low stock report</span>
               </button>
             </>
           )}

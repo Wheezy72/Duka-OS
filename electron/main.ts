@@ -12,6 +12,7 @@ import { ProductService } from "./services/ProductService";
 import { PaymentService } from "./services/PaymentService";
 import { PrinterService } from "./services/PrinterService";
 import { ReceiptService } from "./services/ReceiptService";
+import { ReportService } from "./services/ReportService";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -190,8 +191,7 @@ ipcMain.handle(
       typeof threshold === "number" ? threshold : undefined
     );
   }
-);
-
+);>
 // Notifications: owner help request (e.g. forgotten PIN).
 ipcMain.handle(
   "notify:ownerHelp",
@@ -199,3 +199,6 @@ ipcMain.handle(
     return notificationService.sendOwnerHelpRequest(context);
   }
 );
+
+// Reports: daily summary and CSV export.
+ipcMain.handle);

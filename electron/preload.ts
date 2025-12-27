@@ -50,6 +50,19 @@ const api = {
     ownerHelp: (context?: string) =>
       ipcRenderer.invoke("notify:ownerHelp", context) as Promise<void>,
   },
+  report: {
+    getDaily: (dateISO: string) =>
+      ipcRenderer.invoke("report:getDaily", dateISO) as Promise<{
+        date: string;
+        saleCount: number;
+        total: number;
+        byMethod: { CASH: number; MPESA: number };
+      }>,
+    exportDailyCsv: (dateISO: string) =>
+      ipcRenderer.invoke("report:exportDailyCsv", dateISO) as Promise<{
+        filePath: string;
+      }>,
+  },
   payment: {
     initiateSTK: (phone: string, amount: number) =>
       ipcRenderer.invoke("payment:initiateSTK", {

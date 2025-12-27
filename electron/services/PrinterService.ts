@@ -5,6 +5,9 @@ export type SaleWithItemsAndProducts = Sale & {
   items: (SaleItem & { product: Product })[];
 };
 
+const SHOP_NAME = process.env.DUKA_NAME || "DUKA OS";
+const SHOP_CONTACT = process.env.DUKA_CONTACT || "";
+
 /**
  * PrinterService sends raw bytes to a USB thermal printer.
  *
@@ -43,7 +46,10 @@ export class PrinterService {
 
     const lines: string[] = [];
 
-    lines.push(this.centerText("DUKA OS", maxWidth));
+    lines.push(this.centerText(SHOP_NAME.toUpperCase(), maxWidth));
+    if (SHOP_CONTACT) {
+      lines.push(this.centerText(SHOP_CONTACT, maxWidth));
+    }
     lines.push(this.centerText("------------------------------", maxWidth));
     lines.push("");
 
@@ -124,7 +130,122 @@ export class PrinterService {
         throw new Error("USB printer has no usable interface.");
       }
 
-      if (iface{
+      if (iface.isKernelDriverActive()) {
+        try {
+          iface.detachKernelDriver();
+        } catch {
+          // Ignore detach failure; we'll attempt anyway.
+        }
+      }
+
+      iface.claim();
+
+      const endpoint = iface.endpoints.find(
+        (ep) => ep.direction === "out"
+      ) as OutEndpoint | undefined;
+
+      if (!endpoint) {
+        throw new Error("USB printer has no OUT endpoint.");
+      }
+
+      // ESC p m t1 t2 – common default: ESC p 0 25 250
+      const ESC = "\x1b";
+      const pulse = `${ESC}p\x00\x19\xfa`;
+
+      await new Promise<void>((resolve, reject) => {
+        endpoint.transfer(Buffer.from(pulse, "binary"), (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      iface.release(true, (err) => {
+        device.close();
+        if (err) {
+          console.warn("Failed to release USB printer interface:", err);
+        }
+      });
+    } catch (error) {
+      try {
+        device.close();
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Sends the receipt buffer to the printer over USB.
+   */
+  async printReceipt(sale: SaleWithItemsAndProducts): Promise<void> {
+    const device = this.findPrinter();
+    if (!device) {
+      throw new Error("USB receipt printer not found. Check VendorID/ProductID.");
+    }
+
+    device.open();
+
+    try {
+      const iface = device.interfaces[0];
+      if (!iface) {
+        throw new Error("USB printer has no usable interface.");
+      }
+
+      // Some printers present themselves as HID and have a kernel driver.
+      if (iface.isKernelDriverActive()) {
+        try {
+          iface.detachKernelDriver();
+        } catch {
+          // If detaching fails we still try; worst case the write fails loudly.
+        }
+      }
+
+      iface.claim();
+
+      const endpoint = iface.endpoints.find(
+        (ep) => ep.direction === "out"
+      ) as OutEndpoint | undefined;
+
+      if (!endpoint) {
+        throw new Error("USB printer has no OUT endpoint.");
+      }
+
+      const buffer = this.buildReceiptBuffer(sale);
+
+      await new Promise<void>((resolve, reject) => {
+        endpoint.transfer(buffer, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      // A tiny delay before releasing helps some cheap printers flush.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      iface.release(true, (err) => {
+        // We don't throw here; printing already succeeded or failed above.
+        device.close();
+        if (err) {
+          // Surface in logs if the caller wants, but it's not fatal.
+          console.warn("Failed to release USB printer interface:", err);
+        }
+      });
+    } catch (error) {
+      try {
+        device.close();
+      } catch {
+        // Ignore close errors; they're usually harmless.
+      }
+      throw error;
+    }
+  }
+}{
     const device = this.findPrinter();
     if (!device) {
       throw new Error("USB receipt printer not found. Check VendorID/ProductID.");
